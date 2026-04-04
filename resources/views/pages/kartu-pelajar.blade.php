@@ -253,7 +253,7 @@
                     </td>
                     <td class="qr-code-cell">
                         <div class="qr-code">
-                            <img src="data:image/png;" alt="QR Code" style="width: 100px; height: 100px">
+                            <img src="{{ $qrCode }}" alt="QR Code" style="width: 100px; height: 100px">
                         </div>
                     </td>
                 </tr>
