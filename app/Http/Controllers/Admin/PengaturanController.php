@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StorePengaturanRequest;
 use App\Models\Pengaturan;
-use Illuminate\Http\Request;
 
 class PengaturanController extends Controller
 {
@@ -13,30 +13,26 @@ class PengaturanController extends Controller
         $pengaturan = Pengaturan::first();
         $title = 'Pengaturan';
 
-        return view ('pages.admin.pengaturan', compact('title','pengaturan'));
+        return view('pages.admin.pengaturan', [
+            'title' => $title,
+            'pengaturan' => $pengaturan,
+            'pageKey' => 'pengaturan',
+        ]);
     }
 
-    public function update(Request $request)
+    public function update(StorePengaturanRequest $request)
     {
-        $validated = $request->validate([
-            'nama_sekolah' => 'required',
-            'alamat' => 'required',
-            'jam_masuk' => 'required',
-            'jam_pulang' => 'required',
-        ],[
-            'nama_sekolah.required' => 'Nama sekolah harus diisi',
-            'alamat.required' => 'Alamat harus diisi',
-            'jam_masuk.required' => 'Jam masuk harus diisi',
-            'jam_pulang.required' => 'Jam pulang harus diisi'
-        ]);
+        $validated = $request->validated();
 
-        $data = $request->all();
-        if(!empty($request->logo)) {
-            $data['logo'] = $request->logo->store('logo','public');
+        if($request->hasFile('logo')) {
+            $validated['logo'] = $request->file('logo')->store('logo','public');
         }
 
-        Pengaturan::first()
-        ->update($validated);
-        return redirect()->back()->with('success', 'Pengaturan berhasil di perbaharui');
+        Pengaturan::query()->updateOrCreate(
+            ['id' => Pengaturan::query()->value('id') ?? 1],
+            $validated
+        );
+        
+        return redirect()->back()->with('success', 'Pengaturan berhasil diperbaharui');
     }
 }

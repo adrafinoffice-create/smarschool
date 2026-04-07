@@ -11,30 +11,126 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Endroid\QrCode\QrCode as EndroidQrCode;
 use Endroid\QrCode\Writer\PngWriter;
 use Endroid\QrCode\Writer\SvgWriter;
+use Illuminate\Http\Request;
 
 class SiswaController extends Controller
 {
-
-    public function index()
+    public function index(Request $request)
     {
-        $title = 'Data Siswa';
-        $siswa = Siswa::orderBy('nama')->paginate(10);
-        $kelas = Kelas::orderBy('nama_kelas')->get();
+        $kelasId = $request->integer('kelas_id');
 
-        return view('pages.admin.siswa.index', compact('siswa', 'kelas', 'title'));
+        $siswa = Siswa::with('kelas')
+            ->when($kelasId, fn ($query) => $query->where('kelas_id', $kelasId))
+            ->orderBy('nama')
+            ->paginate(12)
+            ->withQueryString();
+
+        return view('pages.panel.admin.siswa.index', [
+            'title' => 'Siswa',
+            'pageKey' => 'siswa',
+            'siswa' => $siswa,
+            'kelas' => Kelas::orderBy('nama_kelas')->get(),
+            'selectedKelasId' => $kelasId,
+        ]);
     }
 
-    // Ambil Kelas
-    private function getKelas()
+    public function create()
     {
-        return Kelas::orderBy('nama_kelas')->get();
+        return view('pages.panel.admin.siswa.create', [
+            'title' => 'Tambah Siswa',
+            'pageKey' => 'siswa',
+            'kelas' => Kelas::orderBy('nama_kelas')->get(),
+        ]);
     }
-    // Ambil Siswa
-    private function getSiswaById($id)
+
+    public function store(StoreSiswaRequest $request)
     {
-        return Siswa::findOrFail($id);
+        $data = $request->validated();
+
+        Siswa::create($data);
+
+        return redirect()->route('admin.siswa.index', ['kelas_id' => $data['kelas_id']])
+            ->with('success', 'Data siswa berhasil ditambahkan.');
     }
-    // Generate qr Code
+
+    public function edit(Siswa $siswa)
+    {
+        return view('pages.panel.admin.siswa.edit', [
+            'title' => 'Edit Siswa',
+            'pageKey' => 'siswa',
+            'siswa' => $siswa,
+            'kelas' => Kelas::orderBy('nama_kelas')->get(),
+        ]);
+    }
+
+    public function update(StoreSiswaRequest $request, Siswa $siswa)
+    {
+        $data = $request->validated();
+        $siswa->update($data);
+
+        return redirect()->route('admin.siswa.index', ['kelas_id' => $siswa->kelas_id])
+            ->with('success', 'Data siswa berhasil diperbarui.');
+    }
+
+    public function destroy(Siswa $siswa)
+    {
+        $kelasId = $siswa->kelas_id;
+        $siswa->delete();
+
+        return redirect()->route('admin.siswa.index', ['kelas_id' => $kelasId])
+            ->with('success', 'Data siswa berhasil dihapus.');
+    }
+
+    public function show(string $id)
+    {
+        $siswa = Siswa::with('kelas')->findOrFail($id);
+
+        return view('pages.panel.admin.siswa.show', [
+            'siswa' => $siswa,
+            'qrCode' => $this->generateQr($siswa->nis),
+            'title' => 'Detail Siswa',
+            'pageKey' => 'siswa',
+        ]);
+    }
+
+    public function qrCodeDownload($id)
+    {
+        $siswa = Siswa::findOrFail($id);
+        $qr = $this->generateQrPng($siswa->nis);
+
+        return response($qr)
+            ->header('Content-Type', 'image/png')
+            ->header('Content-Disposition', 'attachment; filename="qr-' . $siswa->nis . '.png"');
+    }
+
+    public function kartuPelajarDownload($id)
+    {
+        $siswa = Siswa::with('kelas')->findOrFail($id);
+        $pengaturan = Pengaturan::first();
+
+        $pdf = Pdf::loadView('pages.kartu-pelajar', [
+            'siswa' => $siswa,
+            'qrCode' => 'data:image/png;base64,' . base64_encode($this->generateQrPng($siswa->nis, 150)),
+            'pengaturan' => $pengaturan,
+            'logo' => $this->getLogoBase64($pengaturan),
+        ])->setPaper('A4', 'portrait');
+
+        return $pdf->download('kartu-' . $siswa->nis . '.pdf');
+    }
+
+    public function kartuPelajarPreview($id)
+    {
+        $siswa = Siswa::with('kelas')->findOrFail($id);
+        $pengaturan = Pengaturan::first();
+
+        return view('pages.kartu-pelajar', [
+            'siswa' => $siswa,
+            'qrCode' => 'data:image/png;base64,' . base64_encode($this->generateQrPng($siswa->nis, 150)),
+            'pengaturan' => $pengaturan,
+            'logo' => $this->getLogoBase64($pengaturan),
+        ]);
+    }
+
     private function generateQr($nis, $size = 200)
     {
         $qrCode = EndroidQrCode::create($nis)
@@ -55,123 +151,14 @@ class SiswaController extends Controller
         return $writer->write($qrCode)->getString();
     }
 
-    // Convert ke Base64
-    private function toBase64($data)
-    {
-        return base64_encode($data);
-    }
-    // Ambil logo
     private function getLogoBase64($pengaturan)
     {
-        $logoPath = $pengaturan->logo
+        $logoPath = $pengaturan && $pengaturan->logo
             ? public_path('storage/' . $pengaturan->logo)
             : public_path('image/logo.png');
 
         return file_exists($logoPath)
             ? base64_encode(file_get_contents($logoPath))
             : '';
-    }
-
-
-    public function filterKelas($idKelas)
-    {
-        $selectKelas = Kelas::findOrFail($idKelas);
-        $siswa = Siswa::orderBy('nama')
-            ->where('kelas_id', $idKelas)
-            ->paginate(10);
-        $kelas = Kelas::orderBy('nama_kelas')->get();
-        // $title = 'Data Siswa Kelas' . $selectKelas->nama_kelas;
-
-        return view('pages.admin.siswa.index', compact('siswa', 'kelas'));
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        $kelas = Kelas::orderBy('nama_kelas')->get();
-        $title = 'Tambah Data';
-        return view('pages.admin.siswa.create', compact('kelas', 'title'));
-    }
-
-    public function store(StoreSiswaRequest $request)
-    {
-        $data = $request->validated();
-
-        Siswa::create($data);
-
-        return redirect()->route('siswa.filter', $data['kelas_id'])
-            ->with('success', 'Data siswa berhasil ditambahkan');
-    }
-
-    public function update(StoreSiswaRequest $request, $id)
-    {
-        $siswa = $this->getSiswaById($id);
-
-        $siswa->update($request->validated());
-
-        return redirect()->route('siswa.filter', $siswa->kelas_id)
-            ->with('success', 'Data siswa berhasil diubah');
-    }
-
-    public function show($id)
-    {
-        $siswa = $this->getSiswaById($id);
-
-        return view('pages.admin.siswa.show', [
-            'siswa' => $siswa,
-            'qrCode' => $this->generateQr($siswa->nis),
-            'title' => 'Detail Siswa'
-        ]);
-    }
-
-    public function qrCodedownload($id)
-    {
-        $siswa = $this->getSiswaById($id);
-
-        $qr = $this->generateQrPng($siswa->nis);
-
-        return response($qr)
-            ->header('Content-Type', 'image/png')
-            ->header('Content-Disposition', 'attachment; filename="qr-' . $siswa->nis . '.png"');
-    }
-
-
-    public function kartuPelajarDownload($id)
-    {
-        $siswa = $this->getSiswaById($id);
-        $pengaturan = Pengaturan::first();
-
-        $data = [
-            'siswa' => $siswa,
-            'qrCode' => 'data:image/png;base64,' . base64_encode($this->generateQrPng($siswa->nis, 150)),
-
-            // 'qrCode' => $this->toBase64($this->generateQrPng($siswa->nis, 150)),
-            'pengaturan' => $pengaturan,
-            'logo' => $this->getLogoBase64($pengaturan)
-        ];
-
-        $pdf = Pdf::loadView('pages.kartu-pelajar', $data)
-            ->setPaper('A4', 'portrait');
-
-        return $pdf->download('kartu-' . $siswa->nis . '.pdf');
-    }
-
-    public function edit(string $id)
-    {
-        $title = 'Edit Data Siswa';
-        $kelas = Kelas::orderBy('nama_kelas')->get();
-        $siswa = Siswa::findOrFail($id);
-        return view('pages.admin.siswa.edit', compact('kelas', 'siswa', 'title'));
-    }
-
-    public function destroy(string $id)
-    {
-        $siswa = Siswa::findOrFail($id);
-        $kelasId = $siswa->kelas_id;
-        $siswa->delete();
-
-        return redirect()->route('siswa.filter', $kelasId)->with('success', 'Data Berhasil dihapus');
     }
 }

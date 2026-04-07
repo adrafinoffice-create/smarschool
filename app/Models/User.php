@@ -50,4 +50,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(walikelas::class);
     }
+
+    public function guru()
+    {
+        return $this->hasOne(Guru::class);
+    }
 }

@@ -3,50 +3,67 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreTahunAjaranRequest;
 use App\Models\TahunAjaran;
-use Illuminate\Http\Request;
 
 class TahunAjaranController extends Controller
 {
-   public function index()
-   {
-    $tahun_ajaran = TahunAjaran::OrderBy('tahun_ajaran','DESC')->get();
-    $title = 'Data Tahun Ajaran';
-    return view ('pages.admin.tahun-ajaran.index', compact('tahun_ajaran','title'));
-   }
+    public function index()
+    {
+        return view('pages.panel.admin.tahun-ajaran.index', [
+            'title' => 'Tahun Ajaran',
+            'pageKey' => 'tahun-ajaran',
+            'tahunAjarans' => TahunAjaran::orderByDesc('tahun_ajaran')->get(),
+        ]);
+    }
 
-   public function store(Request $request)
-   {
-    $request->validate([
-        'tahun_ajaran' =>'required',
-         'semester' =>'required',
-    ],[
-        'tahun_ajaran.required' => 'Tahun ajaran harus diisi',
-        'semester.required' => 'Semester harus diisi',
-    ]);
+    public function create()
+    {
+        return view('pages.panel.admin.tahun-ajaran.create', [
+            'title' => 'Tambah Tahun Ajaran',
+            'pageKey' => 'tahun-ajaran',
+        ]);
+    }
 
-    TahunAjaran::create($request->all());
-    return redirect()->back()->with('success','Data Berhasil ditambahkan');
-   }
+    public function store(StoreTahunAjaranRequest $request)
+    {
+        $data = $request->validated();
 
-   public function update(Request $request, $id)
-   {
-    $request->validate([
-        'tahun_ajaran' =>'required',
-         'semester' =>'required',
-    ],[
-        'tahun_ajaran.required' => 'Tahun ajaran harus diisi',
-         'semester.required' => 'Semester harus diisi'
-    ]);
+        TahunAjaran::create($data);
 
-    TahunAjaran::findOrFail($id)->update($request->all());
-    return redirect()->back()->with('success','Data Berhasil diedit');
-   }
+        return redirect()->route('admin.tahun-ajaran.index')->with('success', 'Tahun ajaran berhasil ditambahkan.');
+    }
 
-   public function destroy($id)
-   {
-    TahunAjaran::findOrFail($id)->delete();
-    return redirect()->back()->with('success', 'Data Berhasil dihapus');
-   }
+    public function edit(TahunAjaran $tahunAjaran)
+    {
+        return view('pages.panel.admin.tahun-ajaran.edit', [
+            'title' => 'Edit Tahun Ajaran',
+            'pageKey' => 'tahun-ajaran',
+            'tahunAjaran' => $tahunAjaran,
+        ]);
+    }
 
+    public function update(StoreTahunAjaranRequest $request, TahunAjaran $tahunAjaran)
+    {
+        $data = $request->validated();
+
+        $tahunAjaran->update($data);
+
+        return redirect()->route('admin.tahun-ajaran.index')->with('success', 'Tahun ajaran berhasil diperbarui.');
+    }
+
+    public function activate(TahunAjaran $tahunAjaran)
+    {
+        TahunAjaran::query()->update(['is_active' => false]);
+        $tahunAjaran->update(['is_active' => true]);
+
+        return redirect()->route('admin.tahun-ajaran.index')->with('success', 'Tahun ajaran aktif berhasil diubah.');
+    }
+
+    public function destroy(TahunAjaran $tahunAjaran)
+    {
+        $tahunAjaran->delete();
+
+        return redirect()->route('admin.tahun-ajaran.index')->with('success', 'Tahun ajaran berhasil dihapus.');
+    }
 }
